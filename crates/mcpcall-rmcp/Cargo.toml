@@ -1,0 +1,19 @@
+[package]
+name = "mcpcall-rmcp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "rmcp transport adapter for mcpcall."
+
+[dependencies]
+anyhow.workspace = true
+http.workspace = true
+mcpcall-core.workspace = true
+rmcp.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+shell-words.workspace = true
+tokio.workspace = true
+

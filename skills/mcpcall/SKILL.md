@@ -1,6 +1,6 @@
 ---
 name: mcpcall
-description: Call MCP servers from shell commands through the mcpcall CLI over stdio or Streamable HTTP. Use when an agent needs to list tools, inspect schemas, or invoke tools on DCC MCP servers such as dcc-mcp-core, dcc-mcp-maya, dcc-mcp-3dsmax, or any generic MCP endpoint.
+description: Call MCP servers from shell commands through the mcpcall CLI over stdio or Streamable HTTP. Use when an agent needs to list tools, inspect schemas, read resources/prompts, or invoke tools on DCC MCP servers such as dcc-mcp-core, dcc-mcp-maya, dcc-mcp-blender, dcc-mcp-3dsmax, or any generic MCP endpoint.
 ---
 
 # mcpcall
@@ -13,6 +13,8 @@ MCP server without registering that server directly with the agent runtime.
 - Use `mcpcall`, not `mcp`; `mcp` commonly belongs to other MCP tooling.
 - Start with `mcpcall list` before any `mcpcall call` unless the exact tool name
   and schema were just shown in the current conversation.
+- Use `mcpcall resources ...` or `mcpcall prompts ...` when the task is about
+  MCP context primitives instead of executable tools.
 - Prefer `--json` when another script or agent step will consume the output.
 - For DCC scene-mutating tools, inspect the schema first and tell the user which
   endpoint and tool you are about to call.
@@ -37,6 +39,15 @@ Use JSON arguments for complex payloads:
 
 ```bash
 mcpcall call --url http://127.0.0.1:8765/mcp execute_python --args '{"code":"print(\"ok\")"}'
+```
+
+Read resources and prompts:
+
+```bash
+mcpcall resources --url http://127.0.0.1:8765/mcp list
+mcpcall resources --url http://127.0.0.1:8765/mcp read file:///scene/status.json
+mcpcall prompts --url http://127.0.0.1:8765/mcp list
+mcpcall prompts --url http://127.0.0.1:8765/mcp get review_scene focus=materials
 ```
 
 Use stdio for local MCP servers:
@@ -68,6 +79,8 @@ that begins with `@`.
 1. Determine the MCP URL for the running DCC host.
 2. Run `mcpcall list --url <url> --brief` to confirm connectivity.
 3. Run `mcpcall list --url <url> --schema` and inspect the target tool.
-4. Call the tool with either `KEY=VALUE` pairs or `--args` JSON.
-5. If the result has `isError=true`, treat the action as failed even if the CLI
+4. Use `mcpcall resources` or `mcpcall prompts` if the needed context is not a
+   tool.
+5. Call the tool with either `KEY=VALUE` pairs or `--args` JSON.
+6. If the result has `isError=true`, treat the action as failed even if the CLI
    printed content; rerun with `--json` when the raw envelope is needed.

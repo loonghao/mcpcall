@@ -1,14 +1,13 @@
 use std::{fs, io::Read};
 
 use anyhow::{Context, Result, bail};
-use rmcp::model::JsonObject;
-use serde_json::Value;
+use serde_json::{Map, Value};
 
-use crate::output::ensure_json_object;
+pub type JsonObject = Map<String, Value>;
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct ParsedTarget {
-    pub tool_name: String,
+pub struct ParsedArguments {
+    pub name: String,
     pub arguments: JsonObject,
 }
 
@@ -17,26 +16,67 @@ pub fn parse_call_arguments(
     args_json: Option<&str>,
     repeated_args: &[String],
     positional_pairs: &[String],
-) -> Result<ParsedTarget> {
+) -> Result<ParsedArguments> {
     let mut parsed = parse_target(target)?;
+    merge_arguments(
+        &mut parsed.arguments,
+        args_json,
+        repeated_args,
+        positional_pairs,
+    )?;
+    Ok(parsed)
+}
 
+pub fn parse_named_arguments(
+    name: &str,
+    args_json: Option<&str>,
+    repeated_args: &[String],
+    positional_pairs: &[String],
+) -> Result<ParsedArguments> {
+    let trimmed = name.trim();
+    if trimmed.is_empty() {
+        bail!("name cannot be empty");
+    }
+
+    let mut parsed = ParsedArguments {
+        name: trimmed.to_owned(),
+        arguments: JsonObject::new(),
+    };
+    merge_arguments(
+        &mut parsed.arguments,
+        args_json,
+        repeated_args,
+        positional_pairs,
+    )?;
+    Ok(parsed)
+}
+
+fn merge_arguments(
+    arguments: &mut JsonObject,
+    args_json: Option<&str>,
+    repeated_args: &[String],
+    positional_pairs: &[String],
+) -> Result<()> {
     if let Some(args_json) = args_json {
-        parsed.arguments.extend(read_json_object(args_json)?);
+        arguments.extend(read_json_object(args_json)?);
     }
 
     for pair in repeated_args.iter().chain(positional_pairs.iter()) {
         let (key, value) = parse_pair(pair)?;
-        parsed.arguments.insert(key, parse_scalar_or_json(value)?);
+        arguments.insert(key, parse_scalar_or_json(value)?);
     }
 
-    Ok(parsed)
+    Ok(())
 }
 
-fn parse_target(target: &str) -> Result<ParsedTarget> {
+fn parse_target(target: &str) -> Result<ParsedArguments> {
     let trimmed = target.trim();
     let Some(open) = trimmed.find('(') else {
-        return Ok(ParsedTarget {
-            tool_name: trimmed.to_owned(),
+        if trimmed.is_empty() {
+            bail!("tool name cannot be empty");
+        }
+        return Ok(ParsedArguments {
+            name: trimmed.to_owned(),
             arguments: JsonObject::new(),
         });
     };
@@ -59,8 +99,8 @@ fn parse_target(target: &str) -> Result<ParsedTarget> {
         parse_comma_arguments(inner)?
     };
 
-    Ok(ParsedTarget {
-        tool_name: tool_name.to_owned(),
+    Ok(ParsedArguments {
+        name: tool_name.to_owned(),
         arguments,
     })
 }
@@ -209,6 +249,13 @@ fn split_top_level(input: &str, separator: char) -> Result<Vec<String>> {
     Ok(result)
 }
 
+fn ensure_json_object(value: Value, source: &str) -> Result<JsonObject> {
+    match value {
+        Value::Object(map) => Ok(map),
+        _ => bail!("{source} must be a JSON object"),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -224,7 +271,7 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(parsed.tool_name, "create_sphere");
+        assert_eq!(parsed.name, "create_sphere");
         assert_eq!(parsed.arguments["radius"], json!(2.5));
         assert_eq!(parsed.arguments["name"], json!("hero sphere"));
         assert_eq!(parsed.arguments["visible"], json!(true));
@@ -240,7 +287,7 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(parsed.tool_name, "maya_create");
+        assert_eq!(parsed.name, "maya_create");
         assert_eq!(parsed.arguments["name"], json!("cube"));
         assert_eq!(parsed.arguments["opts"], json!({"size": 4}));
     }
@@ -253,5 +300,20 @@ mod tests {
 
         assert_eq!(parsed.arguments["a"], json!(1));
         assert_eq!(parsed.arguments["b"], json!(3));
+    }
+
+    #[test]
+    fn parses_named_arguments_without_function_syntax() {
+        let parsed = parse_named_arguments(
+            "review_prompt",
+            Some(r#"{"language":"rust"}"#),
+            &["strict=true".to_owned()],
+            &[],
+        )
+        .unwrap();
+
+        assert_eq!(parsed.name, "review_prompt");
+        assert_eq!(parsed.arguments["language"], json!("rust"));
+        assert_eq!(parsed.arguments["strict"], json!(true));
     }
 }
