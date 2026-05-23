@@ -1,0 +1,78 @@
+name: Setup mcpcall
+description: Download a released mcpcall binary and add it to PATH.
+
+inputs:
+  version:
+    description: Release tag to install. Use latest for the newest GitHub release.
+    default: latest
+    required: false
+  repo:
+    description: Repository that publishes mcpcall release assets.
+    default: loonghao/mcpcall
+    required: false
+  install-dir:
+    description: Directory where the binary should be installed. Defaults to RUNNER_TEMP/mcpcall-bin.
+    default: ""
+    required: false
+  github-token:
+    description: Token used by gh release download.
+    default: ""
+    required: false
+
+runs:
+  using: composite
+  steps:
+    - name: Download mcpcall
+      if: runner.os != 'Windows'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token || github.token }}
+        INPUT_VERSION: ${{ inputs.version }}
+        INPUT_REPO: ${{ inputs.repo }}
+        INPUT_INSTALL_DIR: ${{ inputs.install-dir }}
+      run: |
+        set -euo pipefail
+        install_dir="${INPUT_INSTALL_DIR:-${RUNNER_TEMP}/mcpcall-bin}"
+        mkdir -p "${install_dir}"
+        case "${RUNNER_OS}" in
+          Linux)
+            artifact="mcpcall-linux-x86_64"
+            ;;
+          macOS)
+            artifact="mcpcall-macos-x86_64"
+            ;;
+          *)
+            echo "Unsupported runner OS: ${RUNNER_OS}" >&2
+            exit 1
+            ;;
+        esac
+        if [ "${INPUT_VERSION}" = "latest" ]; then
+          gh release download --repo "${INPUT_REPO}" --pattern "${artifact}" --dir "${install_dir}" --clobber
+        else
+          gh release download "${INPUT_VERSION}" --repo "${INPUT_REPO}" --pattern "${artifact}" --dir "${install_dir}" --clobber
+        fi
+        mv "${install_dir}/${artifact}" "${install_dir}/mcpcall"
+        chmod +x "${install_dir}/mcpcall"
+        echo "${install_dir}" >> "${GITHUB_PATH}"
+        "${install_dir}/mcpcall" --version
+
+    - name: Download mcpcall
+      if: runner.os == 'Windows'
+      shell: pwsh
+      env:
+        GH_TOKEN: ${{ inputs.github-token || github.token }}
+        INPUT_VERSION: ${{ inputs.version }}
+        INPUT_REPO: ${{ inputs.repo }}
+        INPUT_INSTALL_DIR: ${{ inputs.install-dir }}
+      run: |
+        $installDir = if ($env:INPUT_INSTALL_DIR) { $env:INPUT_INSTALL_DIR } else { Join-Path $env:RUNNER_TEMP "mcpcall-bin" }
+        New-Item -ItemType Directory -Force -Path $installDir | Out-Null
+        $artifact = "mcpcall-windows-x86_64.exe"
+        if ($env:INPUT_VERSION -eq "latest") {
+          gh release download --repo $env:INPUT_REPO --pattern $artifact --dir $installDir --clobber
+        } else {
+          gh release download $env:INPUT_VERSION --repo $env:INPUT_REPO --pattern $artifact --dir $installDir --clobber
+        }
+        Move-Item -Force -LiteralPath (Join-Path $installDir $artifact) -Destination (Join-Path $installDir "mcpcall.exe")
+        Add-Content -Path $env:GITHUB_PATH -Value $installDir
+        & (Join-Path $installDir "mcpcall.exe") --version

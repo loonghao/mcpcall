@@ -811,14 +811,34 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
+ "mcpcall-core",
+ "mcpcall-rmcp",
+ "tokio",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "mcpcall-core"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "mcpcall-rmcp"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
  "http",
+ "mcpcall-core",
  "reqwest",
  "rmcp",
  "serde",
  "serde_json",
  "shell-words",
  "tokio",
- "tracing-subscriber",
 ]
 
 [[package]]

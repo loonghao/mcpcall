@@ -1,9 +1,9 @@
 # mcpcall
 
-`mcpcall` is a Rust CLI for listing and calling tools on MCP servers. It is meant
-for shell-first workflows around DCC MCP servers such as `dcc-mcp-core`,
-`dcc-mcp-maya`, and `dcc-mcp-3dsmax`, while staying generic enough for any MCP
-server.
+`mcpcall` is a Rust CLI for exercising MCP servers from shell scripts and CI. It
+is meant for DCC MCP smoke tests around `dcc-mcp-core`, `dcc-mcp-maya`,
+`dcc-mcp-blender`, `dcc-mcp-3dsmax`, and related adapters, while staying generic
+enough for any MCP server.
 
 ## Existing Options Checked
 
@@ -15,13 +15,27 @@ server.
 - `rmcp`: official Rust SDK. `mcpcall` uses this for protocol and transport
   support instead of hand-rolling JSON-RPC.
 
-The first local goal is a focused non-interactive CLI: list tools and call tools
-over stdio or Streamable HTTP.
+The current local goal is a focused non-interactive CLI that can replace
+`mcporter` in DCC test automation: list/call tools, list/read resources, get
+prompts, and run over stdio or Streamable HTTP.
+
+## Architecture
+
+The repository is a Cargo workspace with narrow crate responsibilities:
+
+- `mcpcall` is the binary crate. It owns command-line parsing and exit codes.
+- `mcpcall-core` owns domain contracts, argument parsing, transport options, and
+  output rendering. It has no dependency on `rmcp` or `clap`.
+- `mcpcall-rmcp` is the protocol adapter. It owns `rmcp` transports and converts
+  SDK types into `mcpcall-core` contracts.
+
+This keeps the CLI interface small, the protocol adapter replaceable, and the
+test surface centered on contracts instead of SDK details.
 
 ## Build
 
 ```powershell
-cargo build
+cargo build --workspace
 ```
 
 The release binary is named `mcpcall` (`mcpcall.exe` on Windows). Do not rename
@@ -50,6 +64,22 @@ Call a stdio MCP server:
 ```powershell
 mcpcall list --stdio "python -m my_mcp_server"
 mcpcall call --stdio "python -m my_mcp_server" my_tool key=value
+```
+
+List and read resources:
+
+```powershell
+mcpcall resources --url http://127.0.0.1:8765/mcp list
+mcpcall resources --url http://127.0.0.1:8765/mcp templates
+mcpcall resources --url http://127.0.0.1:8765/mcp read file:///scene/status.json
+```
+
+List and get prompts:
+
+```powershell
+mcpcall prompts --url http://127.0.0.1:8765/mcp list
+mcpcall prompts --url http://127.0.0.1:8765/mcp get review_scene focus=materials
+mcpcall prompts --url http://127.0.0.1:8765/mcp get review_scene --args '{"focus":"materials"}'
 ```
 
 Environment and working directory for stdio:
@@ -84,9 +114,27 @@ Local preflight:
 vx just preflight
 ```
 
+## GitHub Actions
+
+Use the bundled setup action from other repositories to download the latest
+release binary onto `PATH`:
+
+```yaml
+- uses: loonghao/mcpcall/.github/actions/setup-mcpcall@main
+- run: mcpcall list --url http://127.0.0.1:8765/mcp --json
+```
+
+Pin a release tag when a workflow needs reproducibility:
+
+```yaml
+- uses: loonghao/mcpcall/.github/actions/setup-mcpcall@main
+  with:
+    version: mcpcall-v0.1.0
+```
+
 ## Agent Skill
 
 Install the bundled skill from `skills/mcpcall` or use the release asset
 `mcpcall-skill.zip`. The skill teaches agents to list MCP tools first, inspect
-schemas, call DCC MCP endpoints safely, and avoid the conflicting `mcp` command
-name.
+schemas, read resources/prompts, call DCC MCP endpoints safely, and avoid the
+conflicting `mcp` command name.
