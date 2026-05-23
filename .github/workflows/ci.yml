@@ -1,0 +1,85 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rust:
+    name: Rust (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.95.0
+          components: clippy, rustfmt
+      - uses: loonghao/vx@v0.8.36
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: rust-${{ runner.os }}
+          shared-key: rust-${{ runner.os }}
+      - name: Preflight
+        run: vx just preflight
+
+  build-artifacts:
+    name: Build artifact (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact: mcpcall-linux-x86_64
+            binary: mcpcall
+          - os: windows-latest
+            artifact: mcpcall-windows-x86_64.exe
+            binary: mcpcall.exe
+          - os: macos-latest
+            artifact: mcpcall-macos-x86_64
+            binary: mcpcall
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.95.0
+      - uses: loonghao/vx@v0.8.36
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: release-${{ runner.os }}
+          shared-key: release-${{ runner.os }}
+      - name: Build
+        run: vx just build
+      - name: Stage binary
+        shell: bash
+        run: cp target/release/${{ matrix.binary }} ${{ matrix.artifact }}
+      - uses: actions/upload-artifact@v6
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.artifact }}
+
+  skill-artifact:
+    name: Build skill artifact
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: loonghao/vx@v0.8.36
+      - name: Package skill
+        run: vx just skill-zip
+      - uses: actions/upload-artifact@v6
+        with:
+          name: mcpcall-skill
+          path: mcpcall-skill.zip
