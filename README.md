@@ -1,5 +1,12 @@
 # mcpcall
 
+[![CI](https://github.com/loonghao/mcpcall/actions/workflows/ci.yml/badge.svg)](https://github.com/loonghao/mcpcall/actions/workflows/ci.yml)
+[![Release](https://github.com/loonghao/mcpcall/actions/workflows/release.yml/badge.svg)](https://github.com/loonghao/mcpcall/actions/workflows/release.yml)
+[![Latest Release](https://img.shields.io/github/v/release/loonghao/mcpcall?sort=semver)](https://github.com/loonghao/mcpcall/releases)
+[![Downloads](https://img.shields.io/github/downloads/loonghao/mcpcall/total?label=downloads)](https://github.com/loonghao/mcpcall/releases)
+[![License](https://img.shields.io/github/license/loonghao/mcpcall)](Cargo.toml)
+[![Rust 1.95.0](https://img.shields.io/badge/rust-1.95.0-orange)](rust-toolchain.toml)
+
 `mcpcall` is a Rust CLI for exercising MCP servers from shell scripts and CI. It
 is meant for DCC MCP smoke tests around `dcc-mcp-core`, `dcc-mcp-maya`,
 `dcc-mcp-blender`, `dcc-mcp-3dsmax`, and related adapters, while staying generic
@@ -40,6 +47,33 @@ cargo build --workspace
 
 The release binary is named `mcpcall` (`mcpcall.exe` on Windows). Do not rename
 it to `mcp` by default; that command name is already used by other MCP tooling.
+
+## Install
+
+Linux and macOS:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/loonghao/mcpcall/main/scripts/install.sh | sh
+```
+
+Windows PowerShell:
+
+```powershell
+irm https://raw.githubusercontent.com/loonghao/mcpcall/main/scripts/install.ps1 | iex
+```
+
+Pin a version or install into a CI-local directory:
+
+```bash
+MCPCALL_VERSION=mcpcall-v0.1.0 MCPCALL_INSTALL_DIR="$RUNNER_TEMP/mcpcall-bin" \
+  sh -c "$(curl -fsSL https://raw.githubusercontent.com/loonghao/mcpcall/main/scripts/install.sh)"
+```
+
+```powershell
+$env:MCPCALL_VERSION = "mcpcall-v0.1.0"
+$env:MCPCALL_INSTALL_DIR = Join-Path $env:RUNNER_TEMP "mcpcall-bin"
+irm https://raw.githubusercontent.com/loonghao/mcpcall/main/scripts/install.ps1 | iex
+```
 
 ## Usage
 
@@ -116,11 +150,21 @@ vx just preflight
 
 ## GitHub Actions
 
-Use the bundled setup action from other repositories to download the latest
-release binary onto `PATH`:
+Use the bundled setup action from other GitHub repositories to download the
+latest release binary onto `PATH`:
 
 ```yaml
 - uses: loonghao/mcpcall/.github/actions/setup-mcpcall@main
+- run: mcpcall list --url http://127.0.0.1:8765/mcp --json
+```
+
+Or use the install script when you want a plain shell step that also works
+outside GitHub Actions:
+
+```yaml
+- name: Install mcpcall
+  run: |
+    curl -fsSL https://raw.githubusercontent.com/loonghao/mcpcall/main/scripts/install.sh | sh
 - run: mcpcall list --url http://127.0.0.1:8765/mcp --json
 ```
 
@@ -130,6 +174,15 @@ Pin a release tag when a workflow needs reproducibility:
 - uses: loonghao/mcpcall/.github/actions/setup-mcpcall@main
   with:
     version: mcpcall-v0.1.0
+```
+
+For Windows runners:
+
+```yaml
+- name: Install mcpcall
+  shell: pwsh
+  run: irm https://raw.githubusercontent.com/loonghao/mcpcall/main/scripts/install.ps1 | iex
+- run: mcpcall.exe list --url http://127.0.0.1:8765/mcp --json
 ```
 
 ## Agent Skill
