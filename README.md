@@ -50,13 +50,18 @@ it to `mcp` by default; that command name is already used by other MCP tooling.
 
 ## Install
 
+Install `mcpcall` the same way as many other CLI tools: run the installer script
+and let it download the matching GitHub Release asset for your platform.
+`install.sh` installs to `$HOME/.local/bin` by default, or to
+`MCPCALL_INSTALL_DIR` when you want a project-local or CI-local install.
+
 Linux and macOS:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/loonghao/mcpcall/main/scripts/install.sh | sh
 ```
 
-Windows PowerShell:
+Windows users can use the PowerShell installer:
 
 ```powershell
 irm https://raw.githubusercontent.com/loonghao/mcpcall/main/scripts/install.ps1 | iex
