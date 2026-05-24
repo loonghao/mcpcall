@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/loonghao/mcpcall/compare/mcpcall-v0.2.0...mcpcall-v0.3.0) (2026-05-24)
+
+
+### Features
+
+* expand MCP client capabilities ([1c4a8fe](https://github.com/loonghao/mcpcall/commit/1c4a8fe1ead9674ab63a2cfc6b01cddb8dc8db8a))
+
 ## [0.2.0](https://github.com/loonghao/mcpcall/compare/mcpcall-v0.1.0...mcpcall-v0.2.0) (2026-05-23)
 
 
