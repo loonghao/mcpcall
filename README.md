@@ -24,7 +24,9 @@ enough for any MCP server.
 
 The current local goal is a focused non-interactive CLI that can replace
 `mcporter` in DCC test automation: list/call tools, list/read resources, get
-prompts, and run over stdio or Streamable HTTP.
+prompts, import named MCP server configs, diagnose endpoints, batch calls over
+one session, discover OAuth metadata, and run over stdio, Streamable HTTP, or
+legacy SSE.
 
 ## Architecture
 
@@ -90,6 +92,18 @@ mcpcall list --url http://127.0.0.1:8765/mcp --schema
 mcpcall list --url http://127.0.0.1:8765/mcp --json
 ```
 
+Use a named server from any `mcpServers` JSON config:
+
+```powershell
+mcpcall config import --from .\mcp.json --output .\mcpcall.json
+mcpcall config list --config .\mcpcall.json
+mcpcall list --config .\mcpcall.json --server maya --schema
+```
+
+Config entries accept common remote URL spellings such as `url`, `baseUrl`,
+`serverUrl`, `httpUrl`, and `mcpUrl`. Header, env, bearer, command, argument,
+and root values can use `${VAR}`, `${VAR:-fallback}`, or `$env:VAR` placeholders.
+
 Call a tool:
 
 ```powershell
@@ -103,6 +117,29 @@ Call a stdio MCP server:
 ```powershell
 mcpcall list --stdio "python -m my_mcp_server"
 mcpcall call --stdio "python -m my_mcp_server" my_tool key=value
+```
+
+Call a legacy SSE server:
+
+```powershell
+mcpcall list --sse-url http://127.0.0.1:8765/sse
+```
+
+Diagnose a server before a smoke test:
+
+```powershell
+mcpcall doctor --url http://127.0.0.1:8765/mcp --json
+```
+
+Reuse one MCP session for several tool calls:
+
+```powershell
+@'
+[
+  {"tool":"dcc_status","arguments":{}},
+  {"tool":"scene_summary","arguments":{"include_hidden":false}}
+]
+'@ | mcpcall batch --url http://127.0.0.1:8765/mcp --json
 ```
 
 List and read resources:
@@ -121,6 +158,20 @@ mcpcall prompts --url http://127.0.0.1:8765/mcp get review_scene focus=materials
 mcpcall prompts --url http://127.0.0.1:8765/mcp get review_scene --args '{"focus":"materials"}'
 ```
 
+Request completion suggestions when a server supports completions:
+
+```powershell
+mcpcall complete --url http://127.0.0.1:8765/mcp prompt review_scene focus mat
+mcpcall complete --url http://127.0.0.1:8765/mcp resource "scene://{node}" node cam
+```
+
+Generate local automation helpers:
+
+```powershell
+mcpcall export --url http://127.0.0.1:8765/mcp types --namespace MayaMcp
+mcpcall export --url http://127.0.0.1:8765/mcp shell --shell powershell
+```
+
 Environment and working directory for stdio:
 
 ```powershell
@@ -131,7 +182,21 @@ HTTP headers and bearer token:
 
 ```powershell
 mcpcall list --url https://example.com/mcp --bearer $env:MCP_TOKEN
+mcpcall list --url https://example.com/mcp --bearer-env MCP_TOKEN
 mcpcall list --url https://example.com/mcp --header X-Trace=local-test
+```
+
+Discover OAuth metadata or request a script-friendly client-credentials token:
+
+```powershell
+mcpcall auth discover --url https://example.com/mcp --json
+mcpcall auth client-credentials --token-url https://auth.example.com/oauth/token --client-id ci --client-secret-env MCP_CLIENT_SECRET --scope mcp:tools
+```
+
+Advertise MCP roots to servers that request `roots/list`:
+
+```powershell
+mcpcall call --url http://127.0.0.1:8765/mcp --root C:\repo tool_name
 ```
 
 Argument values are parsed as JSON when possible. Otherwise they are strings.
@@ -144,8 +209,8 @@ The GitHub Actions setup mirrors `canvas-bridge`:
 
 - `CI` runs formatting, clippy, tests, and cross-platform release builds.
 - `Release` runs `release-please` on `main`.
-- When `release-please` creates a release, CI uploads Linux, Windows, and macOS
-  CLI binaries plus `mcpcall-skill.zip`.
+- When `release-please` creates a release, CI uploads Linux x86_64/aarch64,
+  Windows x86_64, macOS x86_64/aarch64 CLI binaries, plus `mcpcall-skill.zip`.
 
 Local preflight:
 

@@ -38,11 +38,17 @@ jobs:
           - os: ubuntu-latest
             artifact: mcpcall-linux-x86_64
             binary: mcpcall
+          - os: ubuntu-24.04-arm
+            artifact: mcpcall-linux-aarch64
+            binary: mcpcall
           - os: windows-latest
             artifact: mcpcall-windows-x86_64.exe
             binary: mcpcall.exe
-          - os: macos-latest
+          - os: macos-15-intel
             artifact: mcpcall-macos-x86_64
+            binary: mcpcall
+          - os: macos-15
+            artifact: mcpcall-macos-aarch64
             binary: mcpcall
     runs-on: ${{ matrix.os }}
     steps:
@@ -53,10 +59,12 @@ jobs:
         with:
           toolchain: 1.95.0
       - uses: loonghao/vx@v0.8.36
+        with:
+          cache: false
       - uses: Swatinem/rust-cache@v2
         with:
-          key: release-${{ runner.os }}
-          shared-key: release-${{ runner.os }}
+          key: release-${{ runner.os }}-${{ runner.arch }}
+          shared-key: release-${{ runner.os }}-${{ runner.arch }}
       - name: Build
         run: vx just build
       - name: Stage binary
@@ -77,6 +85,8 @@ jobs:
         with:
           ref: ${{ needs.release-please.outputs.tag_name }}
       - uses: loonghao/vx@v0.8.36
+        with:
+          cache: false
       - name: Package skill
         run: vx just skill-zip
       - name: Upload release asset

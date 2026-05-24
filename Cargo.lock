@@ -813,6 +813,8 @@ dependencies = [
  "clap",
  "mcpcall-core",
  "mcpcall-rmcp",
+ "reqwest",
+ "serde_json",
  "tokio",
  "tracing-subscriber",
 ]
@@ -831,6 +833,7 @@ name = "mcpcall-rmcp"
 version = "0.2.0"
 dependencies = [
  "anyhow",
+ "futures",
  "http",
  "mcpcall-core",
  "reqwest",
@@ -838,7 +841,9 @@ dependencies = [
  "serde",
  "serde_json",
  "shell-words",
+ "sse-stream",
  "tokio",
+ "tracing",
 ]
 
 [[package]]
@@ -1102,6 +1107,7 @@ dependencies = [
  "rustls-platform-verifier",
  "serde",
  "serde_json",
+ "serde_urlencoded",
  "sync_wrapper",
  "tokio",
  "tokio-rustls",
@@ -1250,6 +1256,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b39cdef0fa800fc44525c84ccb54a029961a8215f9619753635a9c0d2538d46d"
 
 [[package]]
+name = "ryu"
+version = "1.0.23"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9774ba4a74de5f7b1c1451ed6cd5285a32eddb5cccb8cc655a4e50009e06477f"
+
+[[package]]
 name = "same-file"
 version = "1.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1337,6 +1349,18 @@ dependencies = [
  "serde",
  "serde_core",
  "zmij",
+]
+
+[[package]]
+name = "serde_urlencoded"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d3491c14715ca2294c4d6a88f15e84739788c1d030eed8c110436aafdaa2f3fd"
+dependencies = [
+ "form_urlencoded",
+ "itoa",
+ "ryu",
+ "serde",
 ]
 
 [[package]]

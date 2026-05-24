@@ -121,3 +121,52 @@ pub struct PromptOutput {
     pub messages: Vec<Value>,
     pub raw: Value,
 }
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CompletionOutput {
+    pub values: Vec<String>,
+    pub total: Option<u32>,
+    pub has_more: Option<bool>,
+    pub raw: Value,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DoctorReport {
+    pub ok: bool,
+    pub endpoint: String,
+    pub server: Option<Value>,
+    pub capabilities: Option<Value>,
+    pub tools: PrimitiveProbe,
+    pub resources: PrimitiveProbe,
+    pub resource_templates: PrimitiveProbe,
+    pub prompts: PrimitiveProbe,
+    pub warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PrimitiveProbe {
+    pub supported: bool,
+    pub count: Option<usize>,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BatchToolCall {
+    #[serde(alias = "tool")]
+    pub name: String,
+    #[serde(default)]
+    pub arguments: serde_json::Map<String, Value>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BatchToolOutput {
+    pub name: String,
+    pub ok: bool,
+    pub result: Option<CallOutput>,
+    pub error: Option<String>,
+}

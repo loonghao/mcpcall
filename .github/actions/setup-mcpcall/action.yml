@@ -36,10 +36,32 @@ runs:
         mkdir -p "${install_dir}"
         case "${RUNNER_OS}" in
           Linux)
-            artifact="mcpcall-linux-x86_64"
+            case "${RUNNER_ARCH}" in
+              X64)
+                artifact="mcpcall-linux-x86_64"
+                ;;
+              ARM64)
+                artifact="mcpcall-linux-aarch64"
+                ;;
+              *)
+                echo "Unsupported runner architecture: ${RUNNER_ARCH}" >&2
+                exit 1
+                ;;
+            esac
             ;;
           macOS)
-            artifact="mcpcall-macos-x86_64"
+            case "${RUNNER_ARCH}" in
+              X64)
+                artifact="mcpcall-macos-x86_64"
+                ;;
+              ARM64)
+                artifact="mcpcall-macos-aarch64"
+                ;;
+              *)
+                echo "Unsupported runner architecture: ${RUNNER_ARCH}" >&2
+                exit 1
+                ;;
+            esac
             ;;
           *)
             echo "Unsupported runner OS: ${RUNNER_OS}" >&2

@@ -2,8 +2,9 @@ use anyhow::Result;
 use serde_json::{Value, json};
 
 use crate::model::{
-    CallOutput, ContentBlock, PromptInfo, PromptOutput, ReadResourceOutput, ResourceContent,
-    ResourceInfo, ResourceTemplateInfo, ToolInfo,
+    BatchToolOutput, CallOutput, CompletionOutput, ContentBlock, DoctorReport, PromptInfo,
+    PromptOutput, ReadResourceOutput, ResourceContent, ResourceInfo, ResourceTemplateInfo,
+    ToolInfo,
 };
 
 pub fn print_tools(tools: &[ToolInfo], as_json: bool, schema: bool, brief: bool) -> Result<()> {
@@ -22,18 +23,34 @@ pub fn print_tools(tools: &[ToolInfo], as_json: bool, schema: bool, brief: bool)
         if brief {
             continue;
         }
+        if let Some(title) = tool.raw.get("title").and_then(Value::as_str) {
+            println!("  title: {title}");
+        }
         if let Some(description) = &tool.description {
             println!("  {}", one_line(description));
         }
         print_schema_summary(&tool.input_schema);
+        if let Some(output_schema) = tool.raw.get("outputSchema") {
+            print_output_schema_summary(output_schema);
+        }
+        print_annotations(tool.raw.get("annotations"));
         if schema {
             println!(
-                "  schema: {}",
+                "  input schema: {}",
                 serde_json::to_string_pretty(&tool.input_schema)?
                     .lines()
                     .collect::<Vec<_>>()
                     .join("\n          ")
             );
+            if let Some(output_schema) = tool.raw.get("outputSchema") {
+                println!(
+                    "  output schema: {}",
+                    serde_json::to_string_pretty(output_schema)?
+                        .lines()
+                        .collect::<Vec<_>>()
+                        .join("\n           ")
+                );
+            }
         }
     }
 
@@ -226,6 +243,75 @@ pub fn print_prompt_result(result: &PromptOutput, as_json: bool) -> Result<()> {
     Ok(())
 }
 
+pub fn print_completion_result(result: &CompletionOutput, as_json: bool) -> Result<()> {
+    if as_json {
+        print_json(&result.raw)?;
+        return Ok(());
+    }
+
+    for value in &result.values {
+        println!("{value}");
+    }
+    if result.values.is_empty() {
+        println!("No completions.");
+    }
+    Ok(())
+}
+
+pub fn print_doctor_report(report: &DoctorReport, as_json: bool) -> Result<()> {
+    if as_json {
+        print_json_value(report)?;
+        return Ok(());
+    }
+
+    println!("endpoint: {}", report.endpoint);
+    println!("initialize: {}", if report.ok { "ok" } else { "failed" });
+    if let Some(server) = &report.server {
+        if let Some(name) = server
+            .get("serverInfo")
+            .and_then(|info| info.get("name"))
+            .and_then(Value::as_str)
+        {
+            println!("server: {name}");
+        }
+        if let Some(version) = server
+            .get("serverInfo")
+            .and_then(|info| info.get("version"))
+            .and_then(Value::as_str)
+        {
+            println!("version: {version}");
+        }
+    }
+    print_probe("tools", &report.tools);
+    print_probe("resources", &report.resources);
+    print_probe("resource templates", &report.resource_templates);
+    print_probe("prompts", &report.prompts);
+    for warning in &report.warnings {
+        println!("warning: {warning}");
+    }
+    Ok(())
+}
+
+pub fn print_batch_results(results: &[BatchToolOutput], as_json: bool) -> Result<()> {
+    if as_json {
+        print_json_value(results)?;
+        return Ok(());
+    }
+
+    for (index, item) in results.iter().enumerate() {
+        if index > 0 {
+            println!();
+        }
+        println!("== {} ==", item.name);
+        if let Some(error) = &item.error {
+            println!("error: {error}");
+        } else if let Some(result) = &item.result {
+            print_call_result(result, false)?;
+        }
+    }
+    Ok(())
+}
+
 fn print_content_blocks(content: &[ContentBlock]) -> Result<()> {
     for (index, item) in content.iter().enumerate() {
         if index > 0 {
@@ -332,6 +418,64 @@ fn one_line(value: &str) -> String {
 fn print_json(value: &Value) -> Result<()> {
     println!("{}", serde_json::to_string_pretty(value)?);
     Ok(())
+}
+
+fn print_output_schema_summary(schema: &Value) {
+    let Some(properties) = schema.get("properties").and_then(Value::as_object) else {
+        if schema.get("type").is_some() {
+            println!("  output: {}", schema_type(schema));
+        }
+        return;
+    };
+    if properties.is_empty() {
+        println!("  output: none");
+        return;
+    }
+    let parts = properties
+        .iter()
+        .map(|(name, property)| format!("{name}:{}", schema_type(property)))
+        .collect::<Vec<_>>();
+    println!("  output: {}", parts.join(", "));
+}
+
+fn print_annotations(annotations: Option<&Value>) {
+    let Some(annotations) = annotations.and_then(Value::as_object) else {
+        return;
+    };
+    if annotations.is_empty() {
+        return;
+    }
+    let parts = annotations
+        .iter()
+        .filter_map(|(key, value)| {
+            if key == "title" {
+                None
+            } else if let Some(value) = value.as_bool() {
+                Some(format!("{key}={value}"))
+            } else if let Some(value) = value.as_str() {
+                Some(format!("{key}={value}"))
+            } else {
+                Some(format!("{key}={}", one_line(&value.to_string())))
+            }
+        })
+        .collect::<Vec<_>>();
+    if !parts.is_empty() {
+        println!("  annotations: {}", parts.join(", "));
+    }
+}
+
+pub fn print_json_value(value: &(impl serde::Serialize + ?Sized)) -> Result<()> {
+    println!("{}", serde_json::to_string_pretty(value)?);
+    Ok(())
+}
+
+fn print_probe(label: &str, probe: &crate::model::PrimitiveProbe) {
+    match (probe.supported, probe.count, &probe.error) {
+        (true, Some(count), _) => println!("{label}: ok ({count})"),
+        (true, None, _) => println!("{label}: ok"),
+        (false, _, Some(error)) => println!("{label}: unavailable ({})", one_line(error)),
+        (false, _, None) => println!("{label}: unavailable"),
+    }
 }
 
 #[cfg(test)]

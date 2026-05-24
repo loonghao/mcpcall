@@ -7,15 +7,34 @@ install_dir="${MCPCALL_INSTALL_DIR:-$HOME/.local/bin}"
 
 case "$(uname -s)" in
   Linux)
-    artifact="mcpcall-linux-x86_64"
+    case "$(uname -m)" in
+      x86_64|amd64)
+        artifact="mcpcall-linux-x86_64"
+        ;;
+      aarch64|arm64)
+        artifact="mcpcall-linux-aarch64"
+        ;;
+      *)
+        echo "unsupported Linux architecture: $(uname -m)" >&2
+        exit 1
+        ;;
+    esac
     binary="mcpcall"
     ;;
   Darwin)
-    artifact="mcpcall-macos-x86_64"
+    case "$(uname -m)" in
+      x86_64|amd64)
+        artifact="mcpcall-macos-x86_64"
+        ;;
+      aarch64|arm64)
+        artifact="mcpcall-macos-aarch64"
+        ;;
+      *)
+        echo "unsupported macOS architecture: $(uname -m)" >&2
+        exit 1
+        ;;
+    esac
     binary="mcpcall"
-    if [ "$(uname -m)" != "x86_64" ]; then
-      echo "warning: using macOS x86_64 artifact on $(uname -m); Rosetta may be required" >&2
-    fi
     ;;
   *)
     echo "unsupported OS: $(uname -s)" >&2
