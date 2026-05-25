@@ -2,7 +2,10 @@ use std::process::ExitCode;
 
 use anyhow::Result;
 use clap::Parser;
-use mcpcall_core::{BatchToolCall, ConfigServer, McpcallConfig, ToolInfo, output};
+use mcpcall_core::{
+    BatchToolCall, ConfigServer, DiscoveredConfig, McpcallConfig, ToolInfo, output,
+};
+use serde::Serialize;
 use serde_json::{Value, json};
 use std::{collections::BTreeMap, env, io::Read, path::Path, time::Duration};
 
@@ -416,6 +419,9 @@ fn handle_config(args: cli::ConfigArgs) -> Result<()> {
                 println!("{}", imported.to_pretty_json()?);
             }
         }
+        ConfigCommand::Discover(discover_args) => {
+            handle_config_discover(&path, discover_args)?;
+        }
         ConfigCommand::Add(add_args) => {
             let mut config = if path.exists() {
                 load_config(&path)?
@@ -429,6 +435,121 @@ fn handle_config(args: cli::ConfigArgs) -> Result<()> {
         }
     }
     Ok(())
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ConfigDiscoveryReport {
+    root: std::path::PathBuf,
+    source_count: usize,
+    server_count: usize,
+    sources: Vec<ConfigDiscoverySourceReport>,
+    config: McpcallConfig,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ConfigDiscoverySourceReport {
+    kind: String,
+    path: std::path::PathBuf,
+    server_count: usize,
+    servers: Vec<String>,
+}
+
+fn handle_config_discover(default_output_path: &Path, args: cli::ConfigDiscoverArgs) -> Result<()> {
+    let root = match args.root {
+        Some(root) => root,
+        None => env::current_dir()?,
+    };
+    let discovered = mcpcall_core::discover_configs(&root)
+        .into_iter()
+        .collect::<Result<Vec<_>>>()?;
+    let mut config = mcpcall_core::merge_discovered_configs(&discovered);
+
+    if let Some(output_path) = args.output.as_deref() {
+        if args.merge && output_path.exists() {
+            let mut existing = load_config(output_path)?;
+            for (name, server) in config.mcp_servers {
+                existing.mcp_servers.entry(name).or_insert(server);
+            }
+            config = existing;
+        }
+        write_config(output_path, &config)?;
+        if args.json {
+            output::print_json_value(&config)?;
+        } else {
+            println!(
+                "imported {} server(s) from {} config source(s) into {}",
+                config.mcp_servers.len(),
+                discovered.len(),
+                output_path.display()
+            );
+        }
+        return Ok(());
+    }
+
+    let report = config_discovery_report(root, discovered, config);
+    if args.json {
+        output::print_json_value(&report)?;
+    } else {
+        print_config_discovery_report(&report, default_output_path);
+    }
+    Ok(())
+}
+
+fn config_discovery_report(
+    root: std::path::PathBuf,
+    discovered: Vec<DiscoveredConfig>,
+    config: McpcallConfig,
+) -> ConfigDiscoveryReport {
+    let sources = discovered
+        .into_iter()
+        .map(|source| {
+            let servers = source.config.server_names();
+            ConfigDiscoverySourceReport {
+                kind: source.kind,
+                path: source.path,
+                server_count: servers.len(),
+                servers: servers.into_iter().map(str::to_owned).collect(),
+            }
+        })
+        .collect::<Vec<_>>();
+
+    ConfigDiscoveryReport {
+        root,
+        source_count: sources.len(),
+        server_count: config.mcp_servers.len(),
+        sources,
+        config,
+    }
+}
+
+fn print_config_discovery_report(report: &ConfigDiscoveryReport, default_output_path: &Path) {
+    if report.sources.is_empty() {
+        println!("No MCP config files found under common client locations.");
+        println!(
+            "Pass --root DIR to scan another project, or use --output {} to write discovered servers.",
+            default_output_path.display()
+        );
+        return;
+    }
+
+    println!(
+        "Found {} server(s) in {} config source(s).",
+        report.server_count, report.source_count
+    );
+    for source in &report.sources {
+        let servers = if source.servers.is_empty() {
+            "no servers".to_owned()
+        } else {
+            source.servers.join(", ")
+        };
+        println!("{}: {} ({})", source.kind, source.path.display(), servers);
+    }
+    println!(
+        "Use --output {} to write a merged mcpcall config.",
+        default_output_path.display()
+    );
 }
 
 fn config_server_from_add_args(args: &cli::ConfigAddArgs) -> Result<ConfigServer> {

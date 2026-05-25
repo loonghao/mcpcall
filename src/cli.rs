@@ -6,7 +6,8 @@ use std::{
 use anyhow::{Context, Result, bail};
 use clap::{Args, Parser, Subcommand};
 use mcpcall_core::{
-    ConfigOverlay, Endpoint, McpcallConfig, TransportOptions, parse_key_values, resolve_bearer,
+    ConfigOverlay, Endpoint, McpcallConfig, TransportOptions, parse_key_values, read_config_file,
+    resolve_bearer,
 };
 
 #[derive(Debug, Parser)]
@@ -190,9 +191,7 @@ pub fn resolve_config_path(path: Option<&Path>) -> Result<PathBuf> {
 }
 
 pub fn load_config(path: &Path) -> Result<McpcallConfig> {
-    let text = fs::read_to_string(path)
-        .with_context(|| format!("read MCP config file {}", path.display()))?;
-    McpcallConfig::from_json_str(&text)
+    read_config_file(path)
 }
 
 pub fn write_config(path: &Path, config: &McpcallConfig) -> Result<()> {
@@ -556,6 +555,8 @@ pub enum ConfigCommand {
     Show(ConfigShowArgs),
     /// Import and normalize an MCP client config file.
     Import(ConfigImportArgs),
+    /// Discover MCP configs from common clients and optionally write a merged config.
+    Discover(ConfigDiscoverArgs),
     /// Add or replace one server in a mcpcall config file.
     Add(Box<ConfigAddArgs>),
 }
@@ -591,6 +592,25 @@ pub struct ConfigImportArgs {
     pub merge: bool,
 
     /// Print machine-readable JSON after import.
+    #[arg(long)]
+    pub json: bool,
+}
+
+#[derive(Debug, Args)]
+pub struct ConfigDiscoverArgs {
+    /// Repository root to scan for project-scoped MCP configs.
+    #[arg(long, value_name = "DIR")]
+    pub root: Option<PathBuf>,
+
+    /// Output config file. Omit to print a discovery summary.
+    #[arg(long, value_name = "FILE")]
+    pub output: Option<PathBuf>,
+
+    /// Merge discovered servers into the output config without replacing existing names.
+    #[arg(long)]
+    pub merge: bool,
+
+    /// Print machine-readable JSON.
     #[arg(long)]
     pub json: bool,
 }
