@@ -100,6 +100,17 @@ mcpcall config list --config .\mcpcall.json
 mcpcall list --config .\mcpcall.json --server maya --schema
 ```
 
+Discover MCP servers already registered with common clients:
+
+```powershell
+mcpcall config discover --json
+mcpcall config discover --output .\mcpcall.json --merge
+```
+
+Discovery scans project and user config locations for Cursor, Claude Code,
+Claude Desktop, Codex, Windsurf, OpenCode, and VS Code. It accepts strict JSON,
+JSONC/JSON5-style files, and Codex TOML config files.
+
 Config entries accept common remote URL spellings such as `url`, `baseUrl`,
 `serverUrl`, `httpUrl`, and `mcpUrl`. Header, env, bearer, command, argument,
 and root values can use `${VAR}`, `${VAR:-fallback}`, or `$env:VAR` placeholders.
@@ -210,7 +221,10 @@ The GitHub Actions setup mirrors `canvas-bridge`:
 - `CI` runs formatting, clippy, tests, and cross-platform release builds.
 - `Release` runs `release-please` on `main`.
 - When `release-please` creates a release, CI uploads Linux x86_64/aarch64,
-  Windows x86_64, macOS x86_64/aarch64 CLI binaries, plus `mcpcall-skill.zip`.
+  Windows x86_64, macOS x86_64/aarch64 CLI binaries, target-triple ZIP archives
+  such as `mcpcall-<version>-x86_64-pc-windows-msvc.zip`, plus
+  `mcpcall-skill.zip`. The original raw binary assets stay published for the
+  installer scripts and setup action.
 
 Local preflight:
 

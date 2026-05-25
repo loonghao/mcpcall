@@ -18,6 +18,8 @@ MCP server without registering that server directly with the agent runtime.
 - Use `mcpcall doctor` before debugging flaky endpoint failures.
 - Prefer `--json` when another script or agent step will consume the output.
 - Use `mcpcall batch` when several tool calls should share one MCP session.
+- Use `mcpcall config discover` when the user already has MCP servers registered
+  in Cursor, Claude Code/Desktop, Codex, Windsurf, OpenCode, or VS Code.
 - Use `mcpcall auth discover` for OAuth-backed HTTP servers before guessing
   token endpoints.
 - For DCC scene-mutating tools, inspect the schema first and tell the user which
@@ -37,11 +39,14 @@ Use a named server from a config file:
 
 ```bash
 mcpcall config import --from ./mcp.json --output ./mcpcall.json
+mcpcall config discover --output ./mcpcall.json --merge
 mcpcall list --config ./mcpcall.json --server maya --schema
 ```
 
-Config values may use common aliases like `baseUrl`/`serverUrl` and environment
-placeholders such as `${MCP_TOKEN}`, `${MCP_TOKEN:-fallback}`, or `$env:MCP_TOKEN`.
+`config discover` scans common project and user config paths for Cursor, Claude
+Code/Desktop, Codex, Windsurf, OpenCode, and VS Code. Config values may use
+common aliases like `baseUrl`/`serverUrl` and environment placeholders such as
+`${MCP_TOKEN}`, `${MCP_TOKEN:-fallback}`, or `$env:MCP_TOKEN`.
 
 Call a tool:
 

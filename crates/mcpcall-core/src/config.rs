@@ -1,6 +1,6 @@
 use std::{
     collections::BTreeMap,
-    env,
+    env, fs,
     path::{Path, PathBuf},
 };
 
@@ -12,13 +12,24 @@ use crate::transport::{Endpoint, KeyValue, TransportOptions, key_values_from_map
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct McpcallConfig {
-    #[serde(default, alias = "servers")]
+    #[serde(default, alias = "servers", alias = "mcp_servers")]
     pub mcp_servers: BTreeMap<String, ConfigServer>,
 }
 
 impl McpcallConfig {
     pub fn from_json_str(input: &str) -> Result<Self> {
-        serde_json::from_str(input).context("parse MCP config JSON")
+        parse_json_config(input)
+    }
+
+    pub fn from_toml_str(input: &str) -> Result<Self> {
+        toml::from_str(input).context("parse MCP config TOML")
+    }
+
+    pub fn from_path_str(path: &Path, input: &str) -> Result<Self> {
+        match config_format_for_path(path) {
+            ConfigFormat::Toml => Self::from_toml_str(input),
+            ConfigFormat::Json => Self::from_json_str(input),
+        }
     }
 
     pub fn to_pretty_json(&self) -> Result<String> {
@@ -34,6 +45,21 @@ impl McpcallConfig {
             .get(name)
             .with_context(|| format!("server {name:?} not found in config"))
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConfigSource {
+    pub kind: String,
+    pub path: PathBuf,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiscoveredConfig {
+    pub kind: String,
+    pub path: PathBuf,
+    pub config: McpcallConfig,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -64,6 +90,7 @@ pub struct ConfigServer {
         default,
         rename = "type",
         alias = "transportType",
+        alias = "transport_type",
         skip_serializing_if = "Option::is_none"
     )]
     pub transport_type: Option<String>,
@@ -74,6 +101,7 @@ pub struct ConfigServer {
     #[serde(
         default,
         alias = "bearerTokenEnv",
+        alias = "bearer_token_env",
         skip_serializing_if = "Option::is_none"
     )]
     pub bearer_env: Option<String>,
@@ -89,11 +117,251 @@ pub struct ConfigServer {
 #[serde(rename_all = "camelCase")]
 pub struct OAuthConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(alias = "clientId", alias = "client_id")]
     pub client_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(alias = "clientSecretEnv", alias = "client_secret_env")]
     pub client_secret_env: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub scopes: Vec<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ConfigFormat {
+    Json,
+    Toml,
+}
+
+fn config_format_for_path(path: &Path) -> ConfigFormat {
+    if path
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| extension.eq_ignore_ascii_case("toml"))
+    {
+        ConfigFormat::Toml
+    } else {
+        ConfigFormat::Json
+    }
+}
+
+fn parse_json_config(input: &str) -> Result<McpcallConfig> {
+    serde_json::from_str(input).or_else(|json_error| {
+        json5::from_str(input)
+            .with_context(|| format!("parse MCP config JSON; strict JSON error was: {json_error}"))
+    })
+}
+
+pub fn read_config_file(path: &Path) -> Result<McpcallConfig> {
+    let text = fs::read_to_string(path)
+        .with_context(|| format!("read MCP config file {}", path.display()))?;
+    McpcallConfig::from_path_str(path, &text)
+}
+
+pub fn discover_config_sources(root: &Path) -> Vec<ConfigSource> {
+    let mut sources = Vec::new();
+    push_source(
+        &mut sources,
+        "cursor-project",
+        root.join(".cursor/mcp.json"),
+    );
+    push_source(
+        &mut sources,
+        "claude-code-project",
+        root.join(".claude/settings.local.json"),
+    );
+    push_source(
+        &mut sources,
+        "claude-code-project",
+        root.join(".claude/settings.json"),
+    );
+    push_source(
+        &mut sources,
+        "claude-code-project",
+        root.join(".claude/mcp.json"),
+    );
+    push_source(
+        &mut sources,
+        "codex-project",
+        root.join(".codex/config.toml"),
+    );
+    push_source(&mut sources, "opencode-project", root.join("opencode.json"));
+    push_source(
+        &mut sources,
+        "opencode-project",
+        root.join("opencode.jsonc"),
+    );
+
+    if let Some(home) = home_dir() {
+        push_source(
+            &mut sources,
+            "cursor-user",
+            home.join(".config/Cursor/User/mcp.json"),
+        );
+        push_source(
+            &mut sources,
+            "claude-code-user",
+            home.join(".claude/settings.json"),
+        );
+        push_source(
+            &mut sources,
+            "claude-code-user",
+            home.join(".claude/mcp.json"),
+        );
+        push_source(&mut sources, "claude-code-user", home.join(".claude.json"));
+        push_source(&mut sources, "codex-user", home.join(".codex/config.toml"));
+        push_source(
+            &mut sources,
+            "windsurf-user",
+            home.join(".codeium/windsurf/mcp_config.json"),
+        );
+        push_source(
+            &mut sources,
+            "vscode-user",
+            home.join(".config/Code/User/mcp.json"),
+        );
+        push_source(
+            &mut sources,
+            "vscode-insiders-user",
+            home.join(".config/Code - Insiders/User/mcp.json"),
+        );
+        push_source(
+            &mut sources,
+            "claude-desktop-user",
+            home.join(".config/Claude/claude_desktop_config.json"),
+        );
+        push_source(
+            &mut sources,
+            "opencode-user",
+            home.join(".config/opencode/opencode.json"),
+        );
+        push_source(
+            &mut sources,
+            "opencode-user",
+            home.join(".config/opencode/opencode.jsonc"),
+        );
+
+        #[cfg(target_os = "macos")]
+        {
+            push_source(
+                &mut sources,
+                "claude-desktop-user",
+                home.join("Library/Application Support/Claude/claude_desktop_config.json"),
+            );
+        }
+    }
+
+    if let Some(appdata) = env::var_os("APPDATA").map(PathBuf::from) {
+        push_source(
+            &mut sources,
+            "cursor-user",
+            appdata.join("Cursor/User/mcp.json"),
+        );
+        push_source(
+            &mut sources,
+            "claude-desktop-user",
+            appdata.join("Claude/claude_desktop_config.json"),
+        );
+        push_source(
+            &mut sources,
+            "windsurf-user",
+            appdata.join("Codeium/windsurf/mcp_config.json"),
+        );
+        push_source(
+            &mut sources,
+            "vscode-user",
+            appdata.join("Code/User/mcp.json"),
+        );
+        push_source(
+            &mut sources,
+            "vscode-insiders-user",
+            appdata.join("Code - Insiders/User/mcp.json"),
+        );
+        push_source(
+            &mut sources,
+            "opencode-user",
+            appdata.join("opencode/opencode.json"),
+        );
+        push_source(
+            &mut sources,
+            "opencode-user",
+            appdata.join("opencode/opencode.jsonc"),
+        );
+    }
+
+    if let Some(config_path) = env::var_os("OPENCODE_CONFIG").map(PathBuf::from) {
+        push_source(&mut sources, "opencode-user", config_path);
+    }
+    if let Some(config_dir) = env::var_os("OPENCODE_CONFIG_DIR").map(PathBuf::from) {
+        push_source(
+            &mut sources,
+            "opencode-user",
+            config_dir.join("opencode.json"),
+        );
+        push_source(
+            &mut sources,
+            "opencode-user",
+            config_dir.join("opencode.jsonc"),
+        );
+    }
+
+    dedupe_existing_sources(sources)
+}
+
+pub fn discover_configs(root: &Path) -> Vec<Result<DiscoveredConfig>> {
+    discover_config_sources(root)
+        .into_iter()
+        .map(|source| {
+            read_config_file(&source.path).map(|config| DiscoveredConfig {
+                kind: source.kind,
+                path: source.path,
+                config,
+            })
+        })
+        .collect()
+}
+
+pub fn merge_discovered_configs(configs: &[DiscoveredConfig]) -> McpcallConfig {
+    let mut merged = McpcallConfig::default();
+    for discovered in configs {
+        for (name, server) in &discovered.config.mcp_servers {
+            merged
+                .mcp_servers
+                .entry(name.clone())
+                .or_insert_with(|| server.clone());
+        }
+    }
+    merged
+}
+
+fn push_source(sources: &mut Vec<ConfigSource>, kind: &str, path: PathBuf) {
+    sources.push(ConfigSource {
+        kind: kind.to_owned(),
+        path,
+    });
+}
+
+fn dedupe_existing_sources(sources: Vec<ConfigSource>) -> Vec<ConfigSource> {
+    let mut seen = std::collections::BTreeSet::new();
+    let mut deduped = Vec::new();
+    for source in sources {
+        if !source.path.exists() {
+            continue;
+        }
+        let key = source
+            .path
+            .canonicalize()
+            .unwrap_or_else(|_| source.path.clone());
+        if seen.insert(key) {
+            deduped.push(source);
+        }
+    }
+    deduped
+}
+
+fn home_dir() -> Option<PathBuf> {
+    env::var_os("HOME")
+        .or_else(|| env::var_os("USERPROFILE"))
+        .map(PathBuf::from)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -462,5 +730,82 @@ mod tests {
         let root = normalize_root("relative-root").unwrap();
         assert!(root.starts_with("file://"));
         assert!(root.ends_with("/relative-root"));
+    }
+
+    #[test]
+    fn parses_jsonc_mcp_servers_config() {
+        let config = McpcallConfig::from_json_str(
+            r#"{
+              // editor configs are often JSONC
+              mcpServers: {
+                docs: {
+                  url: "https://example.com/mcp",
+                },
+              },
+            }"#,
+        )
+        .unwrap();
+
+        assert_eq!(config.server_names(), vec!["docs"]);
+        assert_eq!(
+            config.server("docs").unwrap().url.as_deref(),
+            Some("https://example.com/mcp")
+        );
+    }
+
+    #[test]
+    fn parses_codex_toml_mcp_servers_config() {
+        let config = McpcallConfig::from_toml_str(
+            r#"
+            [mcp_servers.dcc]
+            command = "python"
+            args = ["-m", "server"]
+
+            [mcp_servers.dcc.env]
+            TOKEN = "${DCC_TOKEN:-local}"
+            "#,
+        )
+        .unwrap();
+
+        let server = config.server("dcc").unwrap();
+        assert_eq!(server.command.as_deref(), Some("python"));
+        assert_eq!(server.args, vec!["-m", "server"]);
+        assert_eq!(server.env["TOKEN"], "${DCC_TOKEN:-local}");
+    }
+
+    #[test]
+    fn discovers_project_config_sources_and_keeps_first_server() {
+        let root = env::temp_dir().join(format!("mcpcall-config-test-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(root.join(".cursor")).unwrap();
+        fs::create_dir_all(root.join(".claude")).unwrap();
+        fs::write(
+            root.join(".cursor/mcp.json"),
+            r#"{"mcpServers":{"shared":{"url":"https://first.example/mcp"}}}"#,
+        )
+        .unwrap();
+        fs::write(
+            root.join(".claude/mcp.json"),
+            r#"{"mcpServers":{"shared":{"url":"https://second.example/mcp"},"extra":{"command":"node"}}}"#,
+        )
+        .unwrap();
+
+        let discovered = discover_configs(&root)
+            .into_iter()
+            .collect::<Result<Vec<_>>>()
+            .unwrap()
+            .into_iter()
+            .filter(|source| source.path.starts_with(&root))
+            .collect::<Vec<_>>();
+        let merged = merge_discovered_configs(&discovered);
+
+        assert_eq!(discovered.len(), 2);
+        assert_eq!(merged.server_names(), vec!["extra", "shared"]);
+        assert_eq!(
+            merged.server("shared").unwrap().url.as_deref(),
+            Some("https://first.example/mcp")
+        );
+
+        fs::remove_dir_all(&root).unwrap();
     }
 }

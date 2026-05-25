@@ -37,18 +37,23 @@ jobs:
         include:
           - os: ubuntu-latest
             artifact: mcpcall-linux-x86_64
+            archive_target: x86_64-unknown-linux-gnu
             binary: mcpcall
           - os: ubuntu-24.04-arm
             artifact: mcpcall-linux-aarch64
+            archive_target: aarch64-unknown-linux-gnu
             binary: mcpcall
           - os: windows-latest
             artifact: mcpcall-windows-x86_64.exe
+            archive_target: x86_64-pc-windows-msvc
             binary: mcpcall.exe
           - os: macos-15-intel
             artifact: mcpcall-macos-x86_64
+            archive_target: x86_64-apple-darwin
             binary: mcpcall
           - os: macos-15
             artifact: mcpcall-macos-aarch64
+            archive_target: aarch64-apple-darwin
             binary: mcpcall
     runs-on: ${{ matrix.os }}
     steps:
@@ -70,11 +75,40 @@ jobs:
       - name: Stage binary
         shell: bash
         run: cp target/release/${{ matrix.binary }} ${{ matrix.artifact }}
-      - name: Upload release asset
+      - name: Package archive asset
+        id: archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${{ needs.release-please.outputs.tag_name }}"
+          version="${version#mcpcall-v}"
+          version="${version#v}"
+          archive="mcpcall-${version}-${{ matrix.archive_target }}.zip"
+          staging="$(mktemp -d)"
+          cp target/release/${{ matrix.binary }} "${staging}/${{ matrix.binary }}"
+          cp README.md "${staging}/README.md"
+          python - "${staging}" "${archive}" <<'PY'
+          import pathlib
+          import sys
+          import zipfile
+
+          staging = pathlib.Path(sys.argv[1])
+          archive = pathlib.Path(sys.argv[2])
+          with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as output:
+              for path in sorted(staging.iterdir()):
+                  output.write(path, path.name)
+          PY
+          echo "archive=${archive}" >> "${GITHUB_OUTPUT}"
+      - name: Upload release binary asset
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: gh release upload ${{ needs.release-please.outputs.tag_name }} ${{ matrix.artifact }} --clobber
+      - name: Upload release archive asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: gh release upload ${{ needs.release-please.outputs.tag_name }} ${{ steps.archive.outputs.archive }} --clobber
 
   build-skill:
     needs: [release-please]
