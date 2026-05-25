@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/loonghao/mcpcall/compare/mcpcall-v0.3.0...mcpcall-v0.4.0) (2026-05-25)
+
+
+### Features
+
+* discover mcp configs and package release zips ([4e8bdb1](https://github.com/loonghao/mcpcall/commit/4e8bdb105882ef1f2b7b4c421850b81f602529a8))
+
 ## [0.3.0](https://github.com/loonghao/mcpcall/compare/mcpcall-v0.2.0...mcpcall-v0.3.0) (2026-05-24)
 
 
