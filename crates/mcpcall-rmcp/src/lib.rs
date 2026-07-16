@@ -22,10 +22,10 @@ use rmcp::{
         Prompt, RawContent, ReadResourceRequestParams, ReadResourceResult, Resource,
         ResourceContents, ResourceTemplate, Root, RootsCapabilities, ServerJsonRpcMessage, Tool,
     },
-    service::{NotificationContext, Peer, RoleClient},
+    service::{ClientInitializeError, NotificationContext, Peer, RoleClient},
     transport::{
         StreamableHttpClientTransport, TokioChildProcess,
-        streamable_http_client::StreamableHttpClientTransportConfig,
+        streamable_http_client::{StreamableHttpClientTransportConfig, StreamableHttpError},
     },
 };
 use serde::Serialize;
@@ -451,11 +451,12 @@ where
                 bearer,
                 headers,
             } => {
+                let endpoint = url.clone();
                 let transport = http_transport(url, bearer, headers);
                 let mut client = McpcallClient::from_options(options)
                     .serve(transport)
                     .await
-                    .context("initialize MCP server")?;
+                    .map_err(|error| http_initialize_error(&endpoint, error))?;
                 let result = operation(client.peer().clone()).await;
                 let _ = client.close_with_timeout(Duration::from_secs(2)).await;
                 result
@@ -496,6 +497,41 @@ where
     })
     .await
     .with_context(|| format!("{label} timed out after {}s", options.timeout_secs))?
+}
+
+fn http_initialize_error(endpoint: &str, error: ClientInitializeError) -> anyhow::Error {
+    let context = if let Some(cause) = http_connection_failure_cause(&error) {
+        format!(
+            "initialize MCP server at {endpoint}: connection failed: {cause}; \
+             verify the server is listening and the URL/port are correct"
+        )
+    } else {
+        format!("initialize MCP server at {endpoint}")
+    };
+    anyhow::Error::new(error).context(context)
+}
+
+fn http_connection_failure_cause(error: &ClientInitializeError) -> Option<String> {
+    let ClientInitializeError::TransportError { error, .. } = error else {
+        return None;
+    };
+    let http_error = error
+        .error
+        .downcast_ref::<StreamableHttpError<reqwest::Error>>()?;
+    let StreamableHttpError::Client(client_error) = http_error else {
+        return None;
+    };
+    client_error
+        .is_connect()
+        .then(|| root_error_message(client_error))
+}
+
+fn root_error_message(error: &(dyn std::error::Error + 'static)) -> String {
+    let mut current = error;
+    while let Some(source) = current.source() {
+        current = source;
+    }
+    current.to_string()
 }
 
 fn parse_transport(options: &TransportOptions) -> Result<TransportConfig> {
@@ -1000,6 +1036,39 @@ fn raw_json(value: &impl Serialize) -> Result<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn http_connection_refusal_reports_endpoint_and_actionable_cause() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let endpoint = format!("http://{}/mcp", listener.local_addr().unwrap());
+        drop(listener);
+        let options = TransportOptions {
+            endpoint: Endpoint::Http {
+                url: endpoint.clone(),
+                bearer: None,
+                headers: Vec::new(),
+            },
+            timeout_secs: 5,
+            roots: Vec::new(),
+        };
+
+        let error = list_tools(&options).await.unwrap_err();
+        let message = format!("{error:#}");
+
+        assert!(message.contains(&endpoint), "missing endpoint: {message}");
+        assert!(
+            message.contains("connection failed"),
+            "missing connection cause: {message}"
+        );
+        assert!(
+            message.contains("os error"),
+            "missing operating-system root cause: {message}"
+        );
+        assert!(
+            message.contains("server is listening") && message.contains("URL/port"),
+            "missing actionable guidance: {message}"
+        );
+    }
 
     #[cfg(windows)]
     #[test]
