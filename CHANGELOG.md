@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.1](https://github.com/loonghao/mcpcall/compare/mcpcall-v0.4.0...mcpcall-v0.4.1) (2026-07-16)
+
+
+### Bug Fixes
+
+* surface HTTP connection failures ([d25947f](https://github.com/loonghao/mcpcall/commit/d25947f9ac67f4dfef5328cd945c6fc43ca3f0c6))
+
 ## [0.4.0](https://github.com/loonghao/mcpcall/compare/mcpcall-v0.3.0...mcpcall-v0.4.0) (2026-05-25)
 
 
